@@ -1,0 +1,8 @@
+{
+  "name": "mellow-image-studio",
+  "private": true,
+  "version": "0.3.1",
+  "scripts": {
+    "test": "node --test tests/*.test.cjs"
+  }
+}

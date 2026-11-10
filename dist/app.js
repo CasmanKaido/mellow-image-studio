@@ -1,0 +1,53 @@
+'use strict';
+// Independent Image Studio: no music, lyric provider or companion dependencies.
+const $=id=>document.getElementById(id),canvas=$('art'),ctx=canvas.getContext('2d');
+const themes={sage:{colors:['#eff0d1','#d1dfbd','#a8c5a3'],ink:'#2e4433'},peach:{colors:['#fae9d8','#ebc4ac','#cf9388'],ink:'#633f37'},lavender:{colors:['#eee4f3','#cfbfdf','#a7acd1'],ink:'#473c61'},oat:{colors:['#fcf6e9','#eee2c9','#d3c29e'],ink:'#655740'},night:{colors:['#3b4858','#222e41','#1a2634'],ink:'#f0eddf'}};
+let state={bg:'sage',ratio:'landscape',image:null,originalImage:null,fileName:'',padding:100,radius:24,shadow:40,frame:'clean',grain:true,mascot:{id:'none',size:22,opacity:100,center:{x:.84,y:.8}}};
+let needsDraw=true,toastTimer;
+const noise=document.createElement('canvas');noise.width=noise.height=180;const nctx=noise.getContext('2d'),noiseData=nctx.createImageData(180,180);
+for(let i=0;i<noiseData.data.length;i+=4){const value=Math.random()*255;noiseData.data[i]=noiseData.data[i+1]=noiseData.data[i+2]=value;noiseData.data[i+3]=24;}nctx.putImageData(noiseData,0,0);
+function toast(message){$('toast').textContent=message;$('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').classList.remove('show'),4200);}
+function requestDraw(){needsDraw=true;}
+function rounded(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,Math.min(r,w/2,h/2));}
+function theme(){return themes[state.bg] || {colors:[state.bg,state.bg,state.bg],ink:state.ink};}
+function drawBackground(){const {width:w,height:h}=canvas;const colours=theme().colors;const gradient=ctx.createLinearGradient(0,0,w,h);gradient.addColorStop(0,colours[0]);gradient.addColorStop(.52,colours[1]);gradient.addColorStop(1,colours[2]);ctx.fillStyle=gradient;ctx.fillRect(0,0,w,h);const bloom=ctx.createRadialGradient(w*.15,h*.1,0,w*.15,h*.1,w*.7);bloom.addColorStop(0,'#ffffff40');bloom.addColorStop(1,'#ffffff00');ctx.fillStyle=bloom;ctx.fillRect(0,0,w,h);if(state.grain){ctx.save();ctx.globalAlpha=.45;ctx.fillStyle=ctx.createPattern(noise,'repeat');ctx.fillRect(0,0,w,h);ctx.restore();}}
+// The example is rendered through the same framing path as an uploaded image.
+const exampleImage=document.createElement('canvas');exampleImage.width=1200;exampleImage.height=800;
+function drawExample(){
+ const context=exampleImage.getContext('2d');context.fillStyle='#fcfcf7';context.fillRect(0,0,1200,800);
+ context.fillStyle='#999b8e';context.font='18px Inter, sans-serif';context.fillText('A LITTLE ROOM FOR YOUR IDEAS',90,120);
+ context.fillStyle='#20251e';context.font='500 76px Inter, sans-serif';context.fillText('A little space.',90,345);
+ context.fillStyle='#828b74';context.fillText('A better screenshot.',90,440);
+ context.strokeStyle='#e3e5dc';context.lineWidth=2;context.beginPath();context.moveTo(90,610);context.lineTo(1110,610);context.stroke();
+ context.font='19px Inter, sans-serif';context.fillStyle='#a1a596';context.fillText('Your image. Your background. Your finishing touch.',90,665);requestDraw();
+}
+drawExample();document.fonts.ready.then(drawExample);
+function showExample(){
+ $('canvas-label').textContent='Example preview';$('preview-status').textContent='Example · click the preview to add your image';
+ canvas.setAttribute('role','button');canvas.setAttribute('tabindex','0');canvas.setAttribute('aria-label','Example design. Click to add your image.');canvas.classList.add('is-example');
+}
+canvas.addEventListener('click',()=>{if(!state.image)$('image-file').click();});
+canvas.addEventListener('keydown',event=>{if(!state.image&&(event.key==='Enter'||event.key===' ')){event.preventDefault();$('image-file').click();}});
+function drawImage(source=state.image){const w=canvas.width,h=canvas.height;const pad=state.padding,frame=state.frame,header=frame==='browser'?56:frame==='polaroid'?26:0,bottom=frame==='polaroid'?90:0,border=frame==='polaroid'?26:0;const maxW=Math.max(100,w-pad*2-border*2),maxH=Math.max(100,h-pad*2-header-bottom-border);const scale=Math.min(maxW/source.width,maxH/source.height);const iw=source.width*scale,ih=source.height*scale,fw=iw+border*2,fh=ih+header+bottom+border,x=(w-fw)/2,y=(h-fh)/2;ctx.save();ctx.shadowColor=`rgba(25,35,25,${state.shadow/220})`;ctx.shadowBlur=state.shadow;ctx.shadowOffsetY=state.shadow*.4;ctx.fillStyle='#fbfcf7';rounded(x,y,fw,fh,state.radius);ctx.fill();ctx.shadowColor='transparent';rounded(x,y,fw,fh,state.radius);ctx.clip();if(frame==='browser'){ctx.fillStyle='#f4f4ed';ctx.fillRect(x,y,fw,header);['#db9a8b','#e0c386','#a5ba89'].forEach((c,i)=>{ctx.fillStyle=c;ctx.beginPath();ctx.arc(x+23+i*20,y+28,5,0,Math.PI*2);ctx.fill();});}ctx.drawImage(source,x+border,y+header,iw,ih);ctx.restore();}
+function setRatio(ratio){state.ratio=ratio;const sizes={landscape:[1600,1200],square:[1400,1400],portrait:[1080,1920]};[canvas.width,canvas.height]=sizes[ratio];document.querySelector('.workspace').style.setProperty('--canvas-ratio',canvas.width/canvas.height);$('dimensions').textContent=`${canvas.width} × ${canvas.height} px`;document.querySelectorAll('[data-ratio]').forEach(b=>{const active=b.dataset.ratio===ratio;b.classList.toggle('selected',active);b.setAttribute('aria-pressed',active);});requestDraw();}
+async function loadImage(file,{preserveOriginal=false}={}){if(!file||!/^image\/(png|jpeg|webp)$/.test(file.type)){toast('Choose a PNG, JPG, or WebP image.');return;}if(file.size>20*1024*1024){toast('Please choose an image smaller than 20 MB.');return;}const url=URL.createObjectURL(file),img=new Image();img.onload=()=>{state.image=img;if(!preserveOriginal)state.originalImage=img;$('restore-image').disabled=state.image===state.originalImage;state.fileName=file.name;$('image-actions').hidden=false;$('canvas-label').textContent=file.name;$('preview-status').textContent='Preview';canvas.removeAttribute('role');canvas.removeAttribute('tabindex');canvas.setAttribute('aria-label','Your image preview');canvas.classList.remove('is-example');$('export').disabled=false;requestDraw();URL.revokeObjectURL(url);toast('Image added.');};img.onerror=()=>{URL.revokeObjectURL(url);toast('That image could not be opened. Try another file.');};img.src=url;}
+async function exportImage(){if(!state.image){toast('Add your own screenshot before exporting.');$('image-file').click();return;}$('export').disabled=true;try{if(typeof prepareMascot==='function')await prepareMascot();}catch(error){toast(error.message);$('export').disabled=!state.image;return;}if(!state.image)return;draw();canvas.toBlob(blob=>{if(blob){const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`mellow-image-${Date.now()}.png`;a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);toast('PNG downloaded.');}else toast('The image could not be exported. Please try again.');$('export').disabled=false;},'image/png');}
+function draw(){ctx.clearRect(0,0,canvas.width,canvas.height);drawBackground();drawImage(state.image||exampleImage);if(typeof drawMascot==='function')drawMascot();needsDraw=false;}
+function setBackground(bg){state.bg=bg;document.querySelectorAll('[data-bg]').forEach(button=>{const active=button.dataset.bg===bg;button.classList.toggle('selected',active);button.setAttribute('aria-pressed',active);});requestDraw();}
+document.querySelectorAll('[data-ratio]').forEach(button=>button.addEventListener('click',()=>setRatio(button.dataset.ratio)));
+document.querySelectorAll('[data-bg]').forEach(button=>button.addEventListener('click',()=>setBackground(button.dataset.bg)));
+for(const id of ['padding','radius','shadow'])$(id).addEventListener('input',()=>{state[id]=Number($(id).value);$(id+'-out').textContent=state[id]+(id==='shadow'?'%':' px');requestDraw();});
+$('frame').addEventListener('change',()=>{state.frame=$('frame').value;requestDraw();});$('grain').addEventListener('change',()=>{state.grain=$('grain').checked;requestDraw();});$('custom-color').addEventListener('input',()=>setBackground($('custom-color').value));$('shuffle').addEventListener('click',()=>{const options=Object.keys(themes).filter(name=>name!==state.bg);setBackground(options[Math.floor(Math.random()*options.length)]);});
+$('upload').addEventListener('click',()=>$('image-file').click());$('image-file').addEventListener('change',event=>{loadImage(event.target.files[0]);event.target.value='';});
+function removeImage(){state.image=null;state.originalImage=null;state.fileName='';$('image-actions').hidden=true;$('export').disabled=true;showExample();requestDraw();}
+$('remove-image').addEventListener('click',removeImage);
+$('restore-image').addEventListener('click',()=>{if(!state.originalImage)return;state.image=state.originalImage;$('restore-image').disabled=true;requestDraw();toast('Original image restored. Your styling is kept.');});
+const dropzone=$('dropzone');for(const name of ['dragenter','dragover'])dropzone.addEventListener(name,event=>{event.preventDefault();dropzone.classList.add('dragging');});for(const name of ['dragleave','drop'])dropzone.addEventListener(name,event=>{event.preventDefault();dropzone.classList.remove('dragging');});dropzone.addEventListener('drop',event=>loadImage(event.dataTransfer.files[0]));document.addEventListener('paste',event=>{if(/INPUT|TEXTAREA/.test(document.activeElement?.tagName))return;const image=[...event.clipboardData.items].find(item=>item.type.startsWith('image/'));if(image){event.preventDefault();loadImage(image.getAsFile());}});
+$('export').addEventListener('click',exportImage);$('help').addEventListener('click',()=>$('help-dialog').showModal());document.querySelector('.dialog-close').addEventListener('click',()=>$('help-dialog').close());document.querySelector('.dialog-done').addEventListener('click',()=>$('help-dialog').close());
+$('reset').addEventListener('click',()=>{removeImage();if(typeof resetMascot==='function')resetMascot();for(const [id,value] of Object.entries({padding:100,radius:24,shadow:40})){state[id]=value;$(id).value=value;$(id+'-out').textContent=value+(id==='shadow'?'%':' px');}state.grain=true;state.frame='clean';$('grain').checked=true;$('frame').value='clean';setBackground('sage');setRatio('landscape');toast('Editor reset.');});
+function tick(){if(needsDraw)draw();requestAnimationFrame(tick);}setBackground('sage');setRatio('landscape');tick();document.fonts.ready.then(requestDraw);
+
+// Landing-page look links only accept the editor's own supported values.
+const initialLook=new URLSearchParams(location.search);
+if(Object.hasOwn(themes,initialLook.get('bg')))setBackground(initialLook.get('bg'));
+if(['clean','browser','polaroid'].includes(initialLook.get('frame'))){state.frame=initialLook.get('frame');$('frame').value=state.frame;requestDraw();}
